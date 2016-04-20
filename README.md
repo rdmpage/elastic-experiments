@@ -1,12 +1,12 @@
-Elastic Search notes
+# Elastic Search notes
 
 ## Install
 
-For these experiments I use Docker, so we grab the official container and launch it using Kinematic. This gives us Elastic running on http://192.168.99.100:32771 (this URL will vary).
+For these experiments I use Docker, so we grab the official container and launch it using Kinematic. This gives us Elastic running on http://192.168.99.100:32771 (this URL will vary each time you start the container).
 
 ## Add data
 
-We can add data by doing a PUT. Note that we cannot add CouchDB documents as is because both CouchDB and Elastic use the _id field, so we need to delete that from the CocuhDB document. We also need to URL encode the document id (typically a DOI or URL stub).
+We can add data by doing a PUT. Note that we cannot add CouchDB documents as is because both CouchDB and Elastic use the _id field, so we need to delete that from the CouchDB document. We also need to URL encode the document id (typically a DOI or URL stub).
 
 ## Search
 
@@ -39,7 +39,7 @@ To get current mapping:
 
 http://192.168.99.100:32771/bib/_mapping?pretty=true
 
-We grab this file and edit it. The mapping describes mapping for every type of data in the index, but the PUT option for Elastic updates the mapping at the level of data type, so we need to extract the data type we need (e.g., article). So, if the JSON is:
+We grab this file and edit it. The mapping describes mapping for every type of data in the index, but the PUT option for Elastic updates the mapping at the level of data type (e.g., bib/article), so we need to extract the data type we need (e.g., article). So, if the JSON is:
 
 ```
 {
@@ -62,7 +62,7 @@ we want just:
 
 Then we delete the index, recreate it, update the mapping, and reload data (see https://mapbutcher.gitbooks.io/using-spatial-data-in-elasticsearch/content/exercise_2_-_indexing_some_spatial_data/retrieve_the_index_mapping.html )
 
-Example query to find documents that overlap the polygon for “Sulawesi Tengah” (data from https://github.com/lontongcorp/geodata/blob/master/IDN_province_bbox.geojson )
+Example query to find documents that overlap the bounding box polygon for “Sulawesi Tengah” (data from https://github.com/lontongcorp/geodata/blob/master/IDN_province_bbox.geojson )
 
 ```
 {

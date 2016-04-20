@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Elastic search with Leaflet Draw</title>
+    <meta charset="utf-8" />
+    <link 
+        rel="stylesheet" 
+        href="vendor/leaflet-0.7.3/leaflet.css"
+    />
+    <link 
+        rel="stylesheet" 
+        href="vendor/Leaflet.draw/leaflet.draw.css"
+    />
+    
+    
+    <!-- jquery -->
+    <script src="jquery-1.11.2.min.js"></script>
+
+	<!-- Wicket -->
+    <script src="vendor/Wicket/wicket.js"></script>
+    
+    
+</head>
+<body>
+    <div id="map" style="width: 600px; height: 400px"></div>
+    
+    <div id="data" style="font-size:11px;font-family:sans-serif;width:600px;"></div>
+
+    <script
+        src="vendor/leaflet-0.7.3/leaflet.js">
+    </script>
+    <script
+        src="vendor/Leaflet.draw/leaflet.draw.js">
+    </script>
+
+
+
+    <script>
+        var map = L.map('map').setView([0, 0], 2);
+        mapLink = 
+            '<a href="http://openstreetmap.org">OpenStreetMap</a>';
+        L.tileLayer(
+            'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; ' + mapLink + ' Contributors',
+            maxZoom: 18,
+            }).addTo(map);
+
+		var hits = [];
+		
+		//--------------------------------------------------------------------------------
+		function onEachFeature(feature, layer) {
+			// does this feature have a property named popupContent?
+			if (feature.properties && feature.properties.popupContent) {
+				//console.log(feature.properties.popupContent);
+				// content must be a string, see http://stackoverflow.com/a/22476287
+				layer.bindPopup(String(feature.properties.popupContent));
+			}
+		}	
+		
+
+		var drawnItems = new L.FeatureGroup();
+		map.addLayer(drawnItems);
+
+		var drawControl = new L.Control.Draw({
+			position: 'topright',
+			draw: {
+				marker: false, // turn off marker
+				polygon: {
+					shapeOptions: {
+						color: 'purple'
+					},
+					allowIntersection: false,
+					drawError: {
+						color: 'orange',
+						timeout: 1000
+					},
+					showArea: true,
+					metric: false,
+					repeatMode: true
+				},
+				polyline: {
+					shapeOptions: {
+						color: 'red'
+					},
+				},
+				rect: {
+					shapeOptions: {
+						color: 'green'
+					},
+				},
+				circle: {
+					shapeOptions: {
+						color: 'steelblue'
+					},
+				}
+			},
+			edit: {
+				featureGroup: drawnItems
+			}
+		});
+		map.addControl(drawControl);
+
+		map.on('draw:created', function (e) {
+			var type = e.layerType,
+				layer = e.layer;
+
+
+			drawnItems.addLayer(layer);
+			
+			//alert(JSON.stringify(layer.toGeoJSON()));
+			
+			var geojson = JSON.stringify(layer.toGeoJSON());
+
+
+
+			
+			// Do something interesting here...
+			if (hits.length > 0) {
+			    while (hits.length > 0) {
+					map.removeLayer(hits.pop());
+				}
+			}
+			
+			/*
+			{
+  "query": {
+    "geo_shape": {
+      "geometry": { 
+        "shape": {
+        "type":"Polygon","coordinates":[[[119.44694,-3.52023],[119.44694,1.37323],[124.03366,1.37323],[124.03366,-3.52023],[119.44694,-3.52023]]]
+        }
+      }
+    }
+  }
+}
+*/			
+			var q = { query: { geo_shape: { geometry: {}}}};
+			q.query.geo_shape.geometry.shape = layer.toGeoJSON().geometry;
+		
+			$.getJSON('proxy.php?url=' 
+					+ encodeURI('http://192.168.99.100:32769/bib/article/_search')
+					+ '&postdata=' + JSON.stringify(q)
+					+ '&callback=?',
+				function(data){
+  					//alert(JSON.stringify(data ));
+  					
+  					var html = '';
+  					
+  					for (var i in data.hits.hits) {
+  						//alert(JSON.stringify(data.hits.hits[i]._source.geometry));
+  						
+  						hits.push(L.geoJson(data.hits.hits[i]._source.geometry).addTo(map));
+  						
+  						html += '<a href="http://biostor.org/reference/' + data.hits.hits[i]._id + '">' + data.hits.hits[i]._id + '</a>' + '<br />';
+  					}
+  					
+  					$('#data').html(html);
+  					
+  				});		
+			
+			
+		});
+		
+		
+		
+		
+  
+		
+
+    </script>
+</body>
+</html>
