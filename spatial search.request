@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>baseURL</key>
-	<string>http://192.168.99.100:32771/bib/article/_search</string>
+	<string>http://192.168.99.100:32769/bib/article/_search</string>
 	<key>bodyString</key>
 	<string>{
   "query": {

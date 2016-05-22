@@ -29,7 +29,7 @@ $config['elastic_options'] = array(
 		'index' => 'bib',
 		'protocol' => 'http',
 		'host' => '192.168.99.100',
-		'port' => 32771
+		'port' => 32772
 		);
 
 	
