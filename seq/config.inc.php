@@ -26,7 +26,7 @@ $config['proxy_port'] 	= '';
 
 // Elastic--------------------------------------------------------------------------------
 $config['elastic_options'] = array(
-		'index' => 'bib',
+		'index' => 'dna',
 		'protocol' => 'http',
 		'host' => '192.168.99.100',
 		'port' => 32769

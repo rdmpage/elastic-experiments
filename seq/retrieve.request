@@ -3,15 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>baseURL</key>
-	<string>http://192.168.99.100:32772/bib/article/_search</string>
-	<key>bodyString</key>
-	<string>{
-    "query" : {
-        "match" : {
-            "names.namestring" : "Isolapotamon"
-        }
-    }
-}</string>
+	<string>192.168.99.100:32769/dna/sequence/ABBSI131-09</string>
 	<key>followRedirect</key>
 	<true/>
 	<key>handleJSONPCallbacks</key>
@@ -19,7 +11,7 @@
 	<key>headers</key>
 	<array/>
 	<key>httpMethod</key>
-	<string>POST</string>
+	<string>GET</string>
 	<key>jsonpScript</key>
 	<string></string>
 	<key>paramBodyUIChoice</key>
@@ -33,6 +25,6 @@
 	<key>stringEncoding</key>
 	<integer>4</integer>
 	<key>usingHTTPBody</key>
-	<true/>
+	<false/>
 </dict>
 </plist>
