@@ -1,0 +1,2715 @@
+<html>
+<head>
+
+	<script src="jquery-1.11.2.min.js"></script>
+    <script src="jquery-svgpan.js"></script>
+	<script src="treelib.js"></script>	
+
+
+<script>
+
+function isArray(obj){
+    return !!obj && Array === obj.constructor;
+} 
+
+// http://stackoverflow.com/a/29585704
+function cartesianProduct(a) { // a = array of array
+    var i, j, l, m, a1, o = [];
+    if (!a || a.length == 0) return a;
+
+    a1 = a.splice(0, 1)[0]; // the first array of a
+    a = cartesianProduct(a);
+    for (i = 0, l = a1.length; i < l; i++) {
+        if (a && a.length) for (j = 0, m = a.length; j < m; j++)
+            o.push([a1[i]].concat(a[j]));
+        else
+            o.push([a1[i]]);
+    }
+    return o;
+}
+
+function numberCompare(a, b) {
+  return a - b;
+}
+
+
+//-------
+
+
+function allocateSquareMatrix(n, value=null) {
+    let a = new Array(n);
+    for (let i = 0; i < n; i++) {
+        a[i] = new Array(n);
+        if(value !== null) a[i].fill(value);
+    }
+    return a;
+}
+
+function arrayCopy(a) {
+    let b = new Array(a.length),
+        i = a.length;
+    while(i--) { b[i] = a[i]; }
+    return b;
+}
+
+function sumRows(a) {
+    let sum,
+        n = a.length,
+        sums = new Array(n);
+
+    for (let i = 0; i < n; i++) {
+        sum = 0;
+        for (let j = 0; j < n; j++) {
+            if (a[i][j] === undefined) continue;
+            sum += a[i][j];
+        }
+        sums[i] = sum;
+    }
+
+    return sums;
+}
+
+function sortWithIndices(toSort, skip=-1, timsort=false) {
+    var n = toSort.length;
+    var indexCopy = new Array(n);
+    var valueCopy = new Array(n);
+    var i2 = 0;
+
+    for (var i = 0; i < n; i++) {
+        if (toSort[i] === -1 || i === skip) continue;
+        indexCopy[i2] = i;
+        valueCopy[i2++] = toSort[i];
+    }
+    indexCopy.length = i2;
+    valueCopy.length = i2;
+    
+/*
+    if (timsort) {
+        TimSort.sort(indexCopy, (a, b) => toSort[a] - toSort[b]);
+    }
+    else {
+        indexCopy.sort((a, b) => toSort[a] - toSort[b]);
+    }
+
+    TimSort.sort(indexCopy,function(left, right) {
+        return toSort[left] - toSort[right];
+    });
+*/    
+
+	indexCopy.sort(numberCompare);
+	indexCopy.sort(function(left, right) {
+        return toSort[left] - toSort[right];
+    });
+
+	/*
+    sort(indexCopy,function(left, right) {
+        return toSort[left] - toSort[right];
+    });
+    */
+
+    valueCopy.sortIndices = indexCopy;
+    for (var j = 0; j < i2; j++) {
+        valueCopy[j] = toSort[indexCopy[j]];
+    }
+    return valueCopy;
+}
+
+//-----------
+
+class RapidNeighborJoining {
+    constructor(D, taxa, copyDistanceMatrix=false, taxonIdAccessor=(d)=>d.name) {
+        if (taxa.length != D.length) {
+            console.error("Row/column size of the distance matrix does not agree with the size of taxa matrix");
+            return;
+        }
+        let N = this.N = taxa.length;
+        this.cN = this.N;
+        if (copyDistanceMatrix) {
+            this.D = new Array(N);
+            for (let i = 0; i < N; i++) {
+                this.D[i] = arrayCopy(D[i]);
+            }
+        }
+        else {
+            this.D = D;
+        }
+        this.taxa = taxa;
+        this.labelToTaxon = {};
+        this.currIndexToLabel = new Array(N);
+        this.rowChange = new Array(N);
+        this.newRow = new Array(N);
+        this.labelToNode = new Array(2 * N);
+        this.nextIndex = N;
+        this.initializeSI();
+        this.removedIndices = new Set();
+        this.indicesLeft = new Set();
+        for (let i = 0; i < N; i++) {
+            this.currIndexToLabel[i] = i;
+            this.indicesLeft.add(i);
+        }
+        this.rowSumMax = 0;
+        this.PNewick = "";
+        this.taxonIdAccessor = taxonIdAccessor;
+        return this;
+    }
+
+    initializeSI() {
+        let N = this.N;
+
+        this.I = new Array(N);
+        this.S = new Array(N);
+
+        for (let i = 0; i < N; i++) {
+            let sortedRow = sortWithIndices(this.D[i], i, true);
+            this.S[i] = sortedRow;
+            this.I[i] = sortedRow.sortIndices;
+        }
+    }
+
+    search() {
+
+        let qMin = Infinity,
+            D = this.D,
+            cN = this.cN,
+            n2 = cN - 2,
+            S = this.S,
+            I = this.I,
+            rowSums = this.rowSums,
+            removedColumns = this.removedIndices,
+            uMax = this.rowSumMax,
+            q, minI = -1, minJ = -1, c2;
+
+        // initial guess for qMin
+        for (let r = 0; r < this.N; r++) {
+            if (removedColumns.has(r)) continue;
+            c2 = I[r][0];
+            if (removedColumns.has(c2)) continue;
+            q = D[r][c2] * n2 - rowSums[r] - rowSums[c2];
+            if (q < qMin) {
+                qMin = q;
+                minI = r;
+                minJ = c2;
+            }
+        }
+
+        for (let r = 0; r < this.N; r++) {
+            if (removedColumns.has(r)) continue;
+            for (let c = 0; c < S[r].length; c++) {
+                c2 = I[r][c];
+                if (removedColumns.has(c2)) continue;
+                if (S[r][c] * n2 - rowSums[r] - uMax > qMin) break;
+                q = D[r][c2] * n2 - rowSums[r] - rowSums[c2];
+                if (q < qMin) {
+                    qMin = q;
+                    minI = r;
+                    minJ = c2;
+                }
+            }
+        }
+
+        return {minI, minJ};
+    }
+
+    run() {
+        let minI, minJ,
+            d1, d2,
+            l1, l2,
+            node1, node2, node3,
+            self = this;
+
+        function setUpNode(label, distance) {
+            let node;
+            if(label < self.N) {
+                node = new PhyloNode(self.taxa[label], distance);
+                self.labelToNode[label] = node;
+            }
+            else {
+                node = self.labelToNode[label];
+                node.setLength(distance);
+            }
+            return node;
+        }
+        
+        //alert(JSON.stringify(this.D));
+
+        this.rowSums = sumRows(this.D);
+        for (let i = 0; i < this.cN; i++) {
+            if (this.rowSums[i] > this.rowSumMax) this.rowSumMax = this.rowSums[i];
+        }
+
+        while(this.cN > 2) {
+            //if (this.cN % 100 == 0 ) console.log(this.cN);
+            ({ minI, minJ } = this.search());
+
+            d1 = 0.5 * this.D[minI][minJ] + (this.rowSums[minI] - this.rowSums[minJ]) / (2 * this.cN - 4);
+            d2 = this.D[minI][minJ] - d1;
+
+            l1 = this.currIndexToLabel[minI];
+            l2 = this.currIndexToLabel[minJ];
+
+            node1 = setUpNode(l1, d1);
+            node2 = setUpNode(l2, d2);
+            node3 = new PhyloNode(null, null, node1, node2);
+
+            this.recalculateDistanceMatrix(minI, minJ);
+            let sorted = sortWithIndices(this.D[minJ], minJ, true);
+            this.S[minJ] = sorted;
+            this.I[minJ] = sorted.sortIndices;
+            this.S[minI] = this.I[minI] = [];
+            this.cN--;
+
+            this.labelToNode[this.nextIndex] = node3;
+            this.currIndexToLabel[minI] = -1;
+            this.currIndexToLabel[minJ] = this.nextIndex++;
+        }
+
+        let left = this.indicesLeft.values();
+        minI = left.next().value;
+        minJ = left.next().value;
+
+        l1 = this.currIndexToLabel[minI];
+        l2 = this.currIndexToLabel[minJ];
+        d1 = d2 = this.D[minI][minJ] / 2;
+
+        node1 = setUpNode(l1, d1);
+        node2 = setUpNode(l2, d2);
+
+        this.P = new PhyloNode(null, null, node1, node2);
+    }
+
+    recalculateDistanceMatrix(joinedIndex1, joinedIndex2) {
+        let D = this.D,
+            n = D.length,
+            sum = 0, aux, aux2,
+            removedIndices = this.removedIndices,
+            rowSums = this.rowSums,
+            newRow = this.newRow,
+            rowChange = this.rowChange,
+            newMax = 0;
+
+        removedIndices.add(joinedIndex1);
+        for (let i = 0; i < n; i++) {
+            if (removedIndices.has(i)) continue;
+            aux = D[joinedIndex1][i] + D[joinedIndex2][i];
+            aux2 = D[joinedIndex1][joinedIndex2];
+            newRow[i] = 0.5 * (aux - aux2);
+            sum += newRow[i];
+            rowChange[i] = -0.5 * (aux + aux2);
+        }
+        for (let i = 0; i < n; i++) {
+            D[joinedIndex1][i] = -1;
+            D[i][joinedIndex1] = -1;
+            if (removedIndices.has(i)) continue;
+            D[joinedIndex2][i] = newRow[i];
+            D[i][joinedIndex2] = newRow[i];
+            rowSums[i] += rowChange[i];
+            if (rowSums[i] > newMax) newMax = rowSums[i];
+        }
+        rowSums[joinedIndex1] = 0;
+        rowSums[joinedIndex2] = sum;
+        if (sum > newMax) newMax = sum;
+        this.rowSumMax = newMax;
+        this.indicesLeft.delete(joinedIndex1);
+    }
+
+    createNewickTree(node) {
+        if (node.taxon) { // leaf node
+            this.PNewick += this.taxonIdAccessor(node.taxon);
+        }
+        else { // node with children
+            this.PNewick += "(";
+            for (let i = 0; i < node.children.length; i++) {
+                this.createNewickTree(node.children[i]);
+                if (i < node.children.length - 1) this.PNewick += ",";
+            }
+            this.PNewick += ")";
+        }
+        if (node.length) {
+            this.PNewick += `:${node.length}`;
+        }
+    }
+
+    getAsObject() {
+        return this.P;
+    }
+
+    getAsNewick() {
+        this.PNewick = "";
+        this.createNewickTree(this.P);
+        this.PNewick += ";";
+        return this.PNewick;
+    }
+}
+
+class PhyloNode {
+
+    constructor(taxon=null, length=null, child1=null, child2=null) {
+        this.taxon = taxon;
+        this.length = length;
+        this.children = [];
+        if (child1 !== null) this.children.push(child1);
+        if (child2 !== null) this.children.push(child2);
+    }
+    setLength(length) {
+        this.length = length;
+    }
+}
+
+//----------------
+
+function showtree(element_id, newick)
+{
+    var t = new Tree();
+    var element = document.getElementById(element_id);
+	t.Parse(newick);
+
+	if (t.error != 0)
+	{
+		//document.getElementById('message').innerHTML='Error parsing tree';
+	}
+	else
+	{
+		//document.getElementById('message').innerHTML='Parsed OK';
+				
+		t.ComputeWeights(t.root);
+		
+		var td = null;
+		
+		//var selectmenu = document.getElementById('style');
+		//var drawing_type = (selectmenu.options[selectmenu.selectedIndex].value);
+		
+		var drawing_type = 'circlephylogram';
+		
+		switch (drawing_type)
+		{
+			case 'rectanglecladogram':
+				td = new RectangleTreeDrawer();
+				break;
+		
+			case 'phylogram':
+				if (t.has_edge_lengths)
+				{
+					td = new PhylogramTreeDrawer();
+				}
+				else
+				{
+					td = new RectangleTreeDrawer();
+				}
+				break;
+				
+			case 'circle':
+				td = new CircleTreeDrawer();
+				break;
+				
+			case 'circlephylogram':
+				if (t.has_edge_lengths)
+				{
+					td = new CirclePhylogramDrawer();
+				}
+				else
+				{
+					td = new CircleTreeDrawer();
+				}
+				break;
+				
+			case 'cladogram':
+			default:
+				td = new TreeDrawer();
+				break;
+		}
+		
+		// clear existing diagram, if any
+		var svg = document.getElementById('svg');
+		while (svg.hasChildNodes()) 
+		{
+			svg.removeChild(svg.lastChild);
+		}
+		
+		
+		var g = document.createElementNS('http://www.w3.org/2000/svg','g');
+		g.setAttribute('id','viewport');
+		svg.appendChild(g);
+		
+		
+		td.Init(t, {svg_id: 'viewport', width:500, height:500, fontHeight:10, root_length:0.1} );
+		
+		td.CalcCoordinates();
+		td.Draw();
+		
+		// font size
+		var cssStyle = document.createElementNS('http://www.w3.org/2000/svg','style');
+		cssStyle.setAttribute('type','text/css');
+		
+		var font_size = Math.floor(td.settings.height/t.num_leaves);
+		font_size = Math.max(font_size, 1);
+		
+		var style=document.createTextNode("text{font-size:" + font_size + "px;}");
+		cssStyle.appendChild(style);
+		
+		svg.appendChild(cssStyle);
+
+		// label leaves...
+		
+		
+		var n = new NodeIterator(t.root);
+		var q = n.Begin();
+		while (q != null)
+		{
+			if (q.IsLeaf())
+			{
+				switch (drawing_type)
+				{
+					case 'circle':
+					case 'circlephylogram':
+						var align = 'left';
+						var angle = q.angle * 180.0/Math.PI;
+						if ((q.angle > Math.PI/2.0) && (q.angle < 1.5 * Math.PI))
+						{
+							align = 'right';
+							angle += 180.0;
+						}
+						drawRotatedText('viewport', q.xy, q.label, angle, align)
+						break;
+				
+					case 'cladogram':
+					case 'rectanglecladogram':
+					case 'phylogram':
+					default:				
+						drawText('viewport', q.xy, q.label);
+						break;
+				}
+			}
+			q = n.Next();
+		}
+		
+				
+		// Scale to fit window
+		var bbox = svg.getBBox();
+		
+		var scale = Math.min(td.settings.width/bbox.width, td.settings.height/bbox.height);
+		
+		if ((drawing_type == 'circle') || (drawing_type == 'circlephylogram')) {
+			//scale *= 0.2;
+		} else {
+			scale *= 0.8;
+		}
+		
+		
+		// move drawing to centre of viewport
+		var viewport = document.getElementById('viewport');
+		viewport.setAttribute('transform', 'scale(' + scale + ')');
+		
+		// centre
+		bbox = svg.getBBox();
+		if (bbox.x < 0)
+		{
+			viewport.setAttribute('transform', 'translate(' + -bbox.x + ' ' + -bbox.y + ') scale(' + scale + ')');
+		}
+		
+		
+		
+		// pan
+		$('svg').svgPan('viewport');
+	}
+	
+
+}
+
+
+</script>
+</head>
+<body>
+
+	<div style="width:500px;height:500px;background-color:white;border:1px solid rgb(228,228,228);">
+	<svg id="svg" xmlns="http://www.w3.org/2000/svg" version="1.1" height="500" width="500">
+		<g id="viewport">
+		</g>
+	</svg>
+	</div>
+
+
+<script>
+
+var results = {
+    "took": 1226,
+    "timed_out": false,
+    "_shards": {
+        "total": 5,
+        "successful": 5,
+        "failed": 0
+    },
+    "hits": {
+        "total": 28882,
+        "max_score": 402.6941,
+        "hits": [
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI222-10",
+                "_score": 402.6941,
+                "_source": {
+                    "processid": "AMNHI222-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "genus": "Varicorhinus",
+                    "species": "Varicorhinus stenostoma",
+                    "seq": "CCTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATCGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTGCCCCCATCATTTCTTCTTCTACTGGCCTCTTCCGGCGTTGAAGCTGGGGCCGGGACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAATATAAAACCCCCAGCTATTTCTCAGTATCAAACACCCTTATTTGTCTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGACCGAAATCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "15.2642",
+                            "-5.10294"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI221-10",
+                "_score": 402.38544,
+                "_source": {
+                    "processid": "AMNHI221-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "genus": "Varicorhinus",
+                    "species": "Varicorhinus stenostoma",
+                    "seq": "CCTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATCGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTGCCCCCATCATTTCTTCTTCTACTGGCCTCTTCCGGCGTTGAAGCTGGGGCCGGGACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAATATAAAACCCCCAGCTATTTCTCAGTATCAAACACCCTTATTTGTCTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGACCGAAATCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "15.2642",
+                            "-5.10294"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI240-10",
+                "_score": 349.0008,
+                "_source": {
+                    "processid": "AMNHI240-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "subfamily": "Barbinae",
+                    "genus": "Labeobarbus",
+                    "species": "Labeobarbus caudovittatus",
+                    "seq": "CCTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTGAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGTGTTGAAGCTGGAGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGGGCAATTAACTTTATTACCACAACAATTAATATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTATCATTACCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "14.6496",
+                            "-5.442"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW046-11",
+                "_score": 348.38876,
+                "_source": {
+                    "processid": "MAFW046-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ3747",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAACGTTATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTAGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGAGCGATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCTATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6714",
+                            "-16.0769"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ZAFW015-11",
+                "_score": 348.3503,
+                "_source": {
+                    "processid": "ZAFW015-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAE5774",
+                    "seq": "TTATCTTGTATTCGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTGAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGTGTTGAAGCTGGAGCCGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGGGCAATTAACTTTATTACCACAACAATTAATATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTATCATTACCGGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "30.855",
+                            "-12.205"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ZAFW017-11",
+                "_score": 348.1592,
+                "_source": {
+                    "processid": "ZAFW017-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAE5774",
+                    "seq": "CTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTGAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGTGTTGAAGCTGGAGCCGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGGGCAATTAACTTTATTACCACAACAATTAATATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTATCATTACCGGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "30.855",
+                            "-12.205"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW045-11",
+                "_score": 348.1203,
+                "_source": {
+                    "processid": "MAFW045-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ3747",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAACGTTATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTAGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGAGCGATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCTATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6714",
+                            "-16.0769"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW065-11",
+                "_score": 348.09134,
+                "_source": {
+                    "processid": "MAFW065-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ3747",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAACGTTATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTAGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGAGCGATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCTATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6703",
+                            "-16.0736"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW049-11",
+                "_score": 347.58606,
+                "_source": {
+                    "processid": "MAFW049-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ3747",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAACGTTATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTAGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGAGCGATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCTATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6714",
+                            "-16.0769"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW067-11",
+                "_score": 343.77832,
+                "_source": {
+                    "processid": "MAFW067-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ3747",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAACGTTATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATTGGGGCCCCAGACATAGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTAGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGAGCGATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCTATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6703",
+                            "-16.0736"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI525-12",
+                "_score": 341.78943,
+                "_source": {
+                    "processid": "AMNHI525-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAE5774",
+                    "seq": "CCTTTATCTCGTATTCGGTGCCTGAGGCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTGAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAATTGGCTTGTACCACTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGTGTTGAAGCTGGAGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACCTAGCAGGTGTCTCATCAATTCTGGGGGCAATTAACTTTATTACCACAACAATTAATATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTATCATTACCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTTGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "15.9185",
+                            "-3.95272"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MPUMA016-12",
+                "_score": 339.68005,
+                "_source": {
+                    "processid": "MPUMA016-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABU9988",
+                    "seq": "TATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTGAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTGATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGATATGGCGTTCCCACGTATGAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTTTGCTAGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACGCCTTTATTTGTCTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTCTTAGCCGCTGGGATTACAATGCTTCTGACAGACCGAAACCTAAACACCACATTCTTCGACCCGGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "31.0006",
+                            "-25.022"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW112-12",
+                "_score": 337.93018,
+                "_source": {
+                    "processid": "ANGFW112-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACA7146",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTACTCATCCGGGCTGAACTAAGTCAACCCGGGTCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCCGGAGCTGGGACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCTCCAGCTATCTCCCAGTATCAGACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTACTACTTCTATCATTGCCGGTCTTAGCCGCTGGTATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "15.5951",
+                            "-12.2031"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MPUMA012-12",
+                "_score": 337.69147,
+                "_source": {
+                    "processid": "MPUMA012-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABU9988",
+                    "seq": "TGAGCCGGAATAGTGGGAACCGCCTTGAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTGATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGATATGGCGTTCCCACGTATGAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTTTGCTAGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACGCCTTTATTTGTCTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTATCATTGCCAGTCTTAGCCGCTGGGATTACAATGCTTCTGACAGACCGAAACCTAAACACCACATTCTTCGACCCGGCAGGCGGAGGAGACCCAATTCTATATCAACACCT",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "31.0006",
+                            "-25.022"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF712-12",
+                "_score": 336.14877,
+                "_source": {
+                    "processid": "HVDBF712-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF379-11",
+                "_score": 335.39548,
+                "_source": {
+                    "processid": "HVDBF379-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF374-11",
+                "_score": 334.9942,
+                "_source": {
+                    "processid": "HVDBF374-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF715-12",
+                "_score": 332.79642,
+                "_source": {
+                    "processid": "HVDBF715-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATCGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF378-11",
+                "_score": 332.04025,
+                "_source": {
+                    "processid": "HVDBF378-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF380-11",
+                "_score": 331.1694,
+                "_source": {
+                    "processid": "HVDBF380-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACATTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB063-09",
+                "_score": 330.65952,
+                "_source": {
+                    "processid": "HVDB063-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF370-11",
+                "_score": 330.65952,
+                "_source": {
+                    "processid": "HVDBF370-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF739-12",
+                "_score": 330.65952,
+                "_source": {
+                    "processid": "HVDBF739-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW103-12",
+                "_score": 330.4898,
+                "_source": {
+                    "processid": "ANGFW103-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACA7146",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTACTCATCCGGGCTGAACTAAGTCAACCCGGGTCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTGCTGGCTTCTTCCGGCGTTGAAGCCGGAGCTGGAACAGGATGAACAGTTTACCCACCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCTCCAGCTATCTCCCAGTATCAGACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTACTACTTCTATCATTACCGGTTTTAGCCGCTGGTATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "15.5951",
+                            "-12.2031"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF371-11",
+                "_score": 330.00522,
+                "_source": {
+                    "processid": "HVDBF371-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF373-11",
+                "_score": 330.00522,
+                "_source": {
+                    "processid": "HVDBF373-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF736-12",
+                "_score": 330.00522,
+                "_source": {
+                    "processid": "HVDBF736-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF713-12",
+                "_score": 330.00522,
+                "_source": {
+                    "processid": "HVDBF713-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB064-09",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDB064-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF372-11",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF372-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF376-11",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF376-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF377-11",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF377-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF710-12",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF710-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF714-12",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF714-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF716-12",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF716-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF718-12",
+                "_score": 329.9597,
+                "_source": {
+                    "processid": "HVDBF718-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB061-09",
+                "_score": 329.8096,
+                "_source": {
+                    "processid": "HVDB061-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB065-09",
+                "_score": 329.8096,
+                "_source": {
+                    "processid": "HVDB065-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF375-11",
+                "_score": 329.8096,
+                "_source": {
+                    "processid": "HVDBF375-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "29.0158",
+                            "-28.3871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF735-12",
+                "_score": 329.8096,
+                "_source": {
+                    "processid": "HVDBF735-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF717-12",
+                "_score": 329.6401,
+                "_source": {
+                    "processid": "HVDBF717-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF709-12",
+                "_score": 329.6401,
+                "_source": {
+                    "processid": "HVDBF709-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF708-12",
+                "_score": 329.4257,
+                "_source": {
+                    "processid": "HVDBF708-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF711-12",
+                "_score": 328.38855,
+                "_source": {
+                    "processid": "HVDBF711-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAJ2880",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTGAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGACCGAAACCTAAACACTACGTTCTTCGATCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.171",
+                            "-26.871"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI225-10",
+                "_score": 327.77377,
+                "_source": {
+                    "processid": "AMNHI225-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "genus": "Varicorhinus",
+                    "species": "Varicorhinus macrolepidotus",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGGTCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTCATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATCGGAGCCCCCGACATGGCGTTCCCGCGTATAAATAACATAAGTTTCTGACTTCTACCCCCATCATTCCTTCTTCTGCTGGCTTCTTCCGGCGTTGAAGCCGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTAGGGGCAATTAACTTTATTACTACAACAATCAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTACTGCTACTTCTATCACTGCCAGTTTTAGCCGCTGGAATTACGATACTTCTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "22.3953",
+                            "-6.0075"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB253-10",
+                "_score": 325.541,
+                "_source": {
+                    "processid": "HVDB253-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. ",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGGGCCGGAATAGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTCCTTCTCCTGCTGGCCTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTGCTGCTACTTCTATCATTGCCAGTTTTAGCCGCCGGGATTACAATGCTTCTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "31.323",
+                            "-24.083"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB060-09",
+                "_score": 323.39285,
+                "_source": {
+                    "processid": "HVDB060-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACF3686",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTAAGCCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCCGGGGCTGGGACAGGATGAACAGTCTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGGGCATCAGTAGACCTGACAATCTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACGTTCTTTGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "14.5333",
+                            "-22.9"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB062-09",
+                "_score": 323.34888,
+                "_source": {
+                    "processid": "HVDB062-09",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACF3686",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCTTTAAGCCTTCTCATCCGAGCTGAACTAAGCCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCCATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCTCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTACTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGAACAGGATGAACAGTCTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGGGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCGTCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATGAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTACTGCTACTTCTGTCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACGTTCTTTGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "30.5",
+                            "-25.6"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI158-10",
+                "_score": 321.14725,
+                "_source": {
+                    "processid": "AMNHI158-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "subfamily": "Barbinae",
+                    "genus": "Barbus",
+                    "species": "Barbus cf. aboinensis",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTAATAATTTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCCGGCGTTGAAGCTGGAGCCGGAACAGGATGAACAGTTTACCCGCCTCTTGCAGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTCTTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGTGGAGGAGACCCAATTCTATATCAACATCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH272-10",
+                "_score": 317.59174,
+                "_source": {
+                    "processid": "KFISH272-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACR9401",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTGCCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCTGGAACAGGGTGGACGGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTGACAGATCGAAATCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACTTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "38.1128",
+                            "0.25893"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH273-10",
+                "_score": 317.29205,
+                "_source": {
+                    "processid": "KFISH273-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACR9401",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTGCCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCTGGAACAGGGTGGACGGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTGACAGATCGAAATCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACTTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "38.1128",
+                            "0.25893"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW001-11",
+                "_score": 316.7044,
+                "_source": {
+                    "processid": "MAFW001-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAX0771",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCCTCATTCCTTCTCCTGCTGGCCTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTCTACCCCCCTCTTGCGGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTACCAGTTTTAGCCGCCGGGATTACAATGCTTTTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGTGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.1642",
+                            "-12.8332"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MPUMA028-12",
+                "_score": 316.19632,
+                "_source": {
+                    "processid": "MPUMA028-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ7762",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGGGCCGGAATAGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTCCTTCTCCTGCTGGCCTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTGCTGCTACTCCTATCATTGCCAGTTTTAGCCGCCGGGATTACAATGCTTCTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW002-11",
+                "_score": 315.9118,
+                "_source": {
+                    "processid": "MAFW002-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAX0771",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCCTCATTCCTTCTCCTGCTGGCCTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTCTACCCCCCTCTTGCGGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTACCAGTTTTAGCCGCCGGGATTACAATGCTTTTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGTGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.1642",
+                            "-12.8332"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH198-10",
+                "_score": 314.41663,
+                "_source": {
+                    "processid": "KFISH198-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACR9401",
+                    "seq": "TCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTGCCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCTGGAACAGGGTGGACGGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTGACAGATCGAAATCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "38.2421",
+                            "0.30593"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH227-10",
+                "_score": 314.4006,
+                "_source": {
+                    "processid": "KFISH227-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ1333",
+                    "seq": "CCTCTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGAGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCATTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTCTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATCCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "36.9116",
+                            "0.2837"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH211-10",
+                "_score": 314.25494,
+                "_source": {
+                    "processid": "KFISH211-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ1333",
+                    "seq": "CCTCTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGAGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCATTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTCTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATCCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "36.9252",
+                            "0.35637"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW712-12",
+                "_score": 313.39923,
+                "_source": {
+                    "processid": "SAFW712-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.498",
+                            "11.937"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW717-12",
+                "_score": 313.39923,
+                "_source": {
+                    "processid": "SAFW717-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.377",
+                            "11.649"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH210-10",
+                "_score": 313.13522,
+                "_source": {
+                    "processid": "KFISH210-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ1333",
+                    "seq": "CCTCTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGAGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTTGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCATTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTCTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATCCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "36.9251",
+                            "0.35635"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH212-10",
+                "_score": 313.13522,
+                "_source": {
+                    "processid": "KFISH212-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ1333",
+                    "seq": "CCTCTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGAGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTTGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCATTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTCTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATCCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "36.9252",
+                            "0.35638"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW714-12",
+                "_score": 312.86966,
+                "_source": {
+                    "processid": "SAFW714-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCTCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.535",
+                            "12.002"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW706-12",
+                "_score": 312.8595,
+                "_source": {
+                    "processid": "SAFW706-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.412",
+                            "11.641"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH270-10",
+                "_score": 312.79584,
+                "_source": {
+                    "processid": "KFISH270-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACR9401",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTGCCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCTGGAACAGGGTGGACGGTTTACCCACCTCTTGCGGGCAACCTGGCCCACGCAGGAGCGTCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTGACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACTTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "38.1294",
+                            "0.26935"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH226-10",
+                "_score": 312.70547,
+                "_source": {
+                    "processid": "KFISH226-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ1333",
+                    "seq": "CCTCTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGAGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTTGTAATAATCTTCTTTATAGTAATACCTATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCATTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGGGCTGGAACAGGATGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTCTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATCCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "36.9116",
+                            "0.28368"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW715-12",
+                "_score": 312.6937,
+                "_source": {
+                    "processid": "SAFW715-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCTCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.368",
+                            "11.629"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MPUMA002-12",
+                "_score": 312.40167,
+                "_source": {
+                    "processid": "MPUMA002-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ABZ7762",
+                    "seq": "TTGGTGCCTGGGCCGGAATAGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTCCTTCTCCTGCTGGCCTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCGCCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTGGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCCGTGCTGCTACTCCTATCATTGCCAGTTTTAGCCGCCGGGATTACAATGCTTCTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "31.0115",
+                            "-24.7572"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW710-12",
+                "_score": 312.36383,
+                "_source": {
+                    "processid": "SAFW710-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCTCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.377",
+                            "11.649"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW021-12",
+                "_score": 311.87543,
+                "_source": {
+                    "processid": "ANGFW021-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAX0771",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATGGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCCTCATTCCTTCTCCTGCTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCCCCTCTTGCGGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTAGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTACCAGTTTTAGCCGCCGGGATTACAATGCTTTTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGTGGAGGAGACCCAATTCTGTATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.7188",
+                            "-14.9397"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "MAFW048-11",
+                "_score": 311.32507,
+                "_source": {
+                    "processid": "MAFW048-11",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAZ4939",
+                    "seq": "GGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCACTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACTGCTCACGCCTTCGTGATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGACTTGTACCACTAATAATCGGAGCCCCAGACATGGCATTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCATCATTTCTTCTTCTGCTGGCTTCTTCCGGTGTTGAGGCTGGGGCCGGGACAGGATGAACAGTTTATCCACCTCTTGCAGGTAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTATCTCGTCAATTCTGGGGGCAATTAACTTTATTACCACGACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGACCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGGGACCCTATTCTATATCAACACCTG",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "35.6564",
+                            "-16.0264"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH086-10",
+                "_score": 309.58817,
+                "_source": {
+                    "processid": "KFISH086-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH090-10",
+                "_score": 309.24332,
+                "_source": {
+                    "processid": "KFISH090-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH092-10",
+                "_score": 309.24332,
+                "_source": {
+                    "processid": "KFISH092-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI137-10",
+                "_score": 309.14777,
+                "_source": {
+                    "processid": "AMNHI137-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "genus": "Sanagia",
+                    "species": "Sanagia velifera",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTGAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAACGTCATCGTCACTGCTCACGCCTTCGTAATAATTTTCTTTATAGTAATACCCATTCTCATTGGAGGATTTGGAAACTGGCTTGTACCGCTAATAATCGGAGCCCCAGACATGGCGTTCCCGCGTATAAATAACATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCTTCTTCCGGCGTTGAGGCCGGGGCTGGGACGGGATGAACAGTTTACCCGCCTCTTGCAGGTAACCTAGCCCACGCAGGGGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTGGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTACCAAACACCTTTATTTGTTTGATCTGTACTTGTAACCGCCGTACTGCTACTTCTATCACTGCCAGTTTTAGCCGCTGGAATTACGATACTTCTAACAGACCGAAACCTAAATACCACGTTCTTCGACCCAGCAGGCGGAGGAGACCC"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ZAFW089-12",
+                "_score": 308.8345,
+                "_source": {
+                    "processid": "ZAFW089-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAX0771",
+                    "seq": "ATTTGGTGCCTGAGCCGGAATGGTAGGAACCGCCCTAAGCCTTCTTATCCGGGCTGAACTAAGTCAACCTGGATCACTTCTAGGTGATGACCAAATTTATAATGTCATCGTCACTGCTCATGCCTTCGTAATAATCTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTTTACCCCCCTCATTCCTTCTCCTGCTGGCTTCTTCCGGCGTTGAAGCTGGGGCTGGGACAGGATGAACAGTTTACCCCCCTCTTGCGGGCAACCTGGCCCACGCAGGAGCATCAGTAGACCTGACAATTTTTTCACTCCACTTAGCAGGGGTCTCATCAATTCTAGGAGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCCATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTACTTGTAACCGCTGTGCTGCTACTTTTATCATTACCAGTTTTAGCCGCCGGGATTACAATGCTTTTAACAGACCGAAACCTAAATACCACATTCTTCGACCCAGCAGGTGGAGGAGACCCAATTCTGTATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "25.126",
+                            "-11.825"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW705-12",
+                "_score": 308.83115,
+                "_source": {
+                    "processid": "SAFW705-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACNGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCTCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.498",
+                            "11.937"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH056-10",
+                "_score": 308.751,
+                "_source": {
+                    "processid": "KFISH056-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Siluriformes",
+                    "species": "Siluriformes sp. ",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.4855",
+                            "-0.07123"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH057-10",
+                "_score": 308.751,
+                "_source": {
+                    "processid": "KFISH057-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Siluriformes",
+                    "species": "Siluriformes sp. ",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.4855",
+                            "-0.07123"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH141-10",
+                "_score": 308.751,
+                "_source": {
+                    "processid": "KFISH141-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.7443",
+                            "0.15946"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH088-10",
+                "_score": 308.21298,
+                "_source": {
+                    "processid": "KFISH088-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH089-10",
+                "_score": 308.20868,
+                "_source": {
+                    "processid": "KFISH089-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH091-10",
+                "_score": 308.20868,
+                "_source": {
+                    "processid": "KFISH091-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "KFISH087-10",
+                "_score": 308.20868,
+                "_source": {
+                    "processid": "KFISH087-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGGACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAATTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTGTCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "34.5423",
+                            "0.08528"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW718-12",
+                "_score": 308.2034,
+                "_source": {
+                    "processid": "SAFW718-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACCGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCGTCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCTCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.385",
+                            "11.62"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "GUFW020-12",
+                "_score": 304.46127,
+                "_source": {
+                    "processid": "GUFW020-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "TACCCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGATGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTCCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTATTT",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "-8.332",
+                            "7.67"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "GUFW121-12",
+                "_score": 304.46127,
+                "_source": {
+                    "processid": "GUFW121-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "TACCCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGATGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTCCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTATTT",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "-8.306",
+                            "7.633"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "GUFW037-12",
+                "_score": 303.4344,
+                "_source": {
+                    "processid": "GUFW037-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "TACCCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGATGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTCCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTATTT",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "-8.418",
+                            "7.704"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "GUFW043-12",
+                "_score": 303.4344,
+                "_source": {
+                    "processid": "GUFW043-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "TACCCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTCATCCGGGCTGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGGGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCGCGTATAAATAATATGAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGATGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTCCTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTATTT",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "-8.418",
+                            "7.704"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI156-10",
+                "_score": 294.2192,
+                "_source": {
+                    "processid": "AMNHI156-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "family": "Cyprinidae",
+                    "subfamily": "Barbinae",
+                    "genus": "Barbus",
+                    "species": "Barbus cf. aboinensis",
+                    "seq": "GGTGCCTGAGCCGGAATAGTAGGAACCGCCTTAAGCCTTCTTATCCGGGCCGAACTAAGTCAACCCGGATCGCTTCTAGGTGATGACCAAATTTATAATGTTATCGTTACCGCTCACGCCTTCGTAATAATTTTCTTTATAGTAATACCCATCCTTATTGGAGGATTTGGGAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCCGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCAGGCAATCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTATTACTACTCTTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACC",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "10.3031",
+                            "4.36944"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "SAFW716-12",
+                "_score": 280.20425,
+                "_source": {
+                    "processid": "SAFW716-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAA5958",
+                    "seq": "CTAAGTCAACCCGGATCGCTTCTAGGNGATGACCAAATTTATAATGTTATCGTCACTGCTCACGCCTTCGTAATAATCTTCTTTATAGTAATACCTATTCTTATTGGAGGATTTGGAAACTGGCTTGTACCACTAATAATTGGGGCCCCAGACATGGCGTTCCCACGTATAAATAATATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCTGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCGGGCAACCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCGGGAGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAATATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTACTACTACTTCTATCATTGCCAGTTTTAGCCGCTGGGATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTTGACCCAGCAGGCGGAGGAGACCCAATTTTATATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "37.498",
+                            "11.937"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "AMNHI143-10",
+                "_score": 266.14148,
+                "_source": {
+                    "processid": "AMNHI143-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. ",
+                    "seq": "CTAATAATTGGAGCCCCAGACATGGCGTTCCCACGTATAAATAACATAAGTTTCTGACTTCTACCCCCATCATTTCTTCTTCTGCTGGCCTCTTCCGGCGTTGAAGCTGGAGCCGGAACAGGGTGAACAGTTTACCCACCTCTTGCAGGCAATCTAGCCCACGCAGGAGCATCAGTAGATCTAACAATTTTTTCACTCCACTTAGCAGGTGTCTCATCAATTCTAGGGGCAATTAACTTTATTACTACAACAATTAACATAAAACCCCCAGCTATTTCCCAGTATCAAACACCTTTATTTGTTTGATCCGTGCTTGTAACCGCTGTATTACTACTCTTATCATTGCCAGTTTTAGCCGCTGGAATTACAATGCTTCTAACAGATCGAAACCTAAACACCACATTCTTCGACCCAGCAGGCGGAGGAGACCCAATTCTATAT"
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW028-12",
+                "_score": 248.64656,
+                "_source": {
+                    "processid": "ANGFW028-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACM4017",
+                    "seq": "CCTTTATCTTGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGCCAACCTGGATCACTCTTAGGTGATGATCAAATTTATAATGTTATCGTTACTGCCCACGCCTTCGTAATAATTTTCTTTATAGTAATACCAATCCTTATTGGAGGATTTGGAAATTGACTGGTACCGCTAATAATTGGAGCCCCAGATATAGCATTTCCTCGAATAAATAATATAAGTTTCTGATTACTTCCCCCCTCATTTCTTCTACTCCTGGCCTCTTCCGGTGTAGAAGCGGGGGCAGGAACAGGTTGAACAGTCTACCCACCCCTTGCAAGCAACCTAGCCCATGCAGGAGCATCAGTTGATTTGACAATTTTCTCACTCCATTTAGCAGGTGTTTCATCAATTCTTGGAGCAATTAATTTTATTACCACAACTATTAATATAAAACCTCCAACTATTTCCCAATACCAAACACCACTATTTGTATGATCTGTACTTGTAACTGCCGTTCTGCTTCTCCTATCACTACCTGTGCTAGCTGCAGGAATTACAATGCTTCTAACAGACCGAAACCTTAATACTACATTCTTTGACCCCGCAGGAGGAGGAGACCCCATCCTCTATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.6684",
+                            "-14.7461"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF733-12",
+                "_score": 247.9914,
+                "_source": {
+                    "processid": "HVDBF733-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGGGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGGGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCAGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW023-12",
+                "_score": 247.95164,
+                "_source": {
+                    "processid": "ANGFW023-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACM4017",
+                    "seq": "CCTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGCCAACCTGGATCACTCTTAGGTGATGATCAAATTTATAATGTTATCGTTACTGCCCACGCCTTCGTAATAATTTTCTTTATAGTAATACCAATCCTTATTGGAGGATTTGGAAATTGACTGGTACCACTAATAATTGGAGCCCCAGATATAGCATTTCCTCGAATAAATAATATAAGTTTCTGATTACTTCCCCCCTCATTTCTTCTACTCCTGGCCTCTTCCGGTGTAGAAGCGGGGGCAGGAACAGGTTGAACAGTCTACCCACCCCTTGCAAGCAACCTAGCCCATGCAGGAGCATCAGTTGATTTGACAATTTTCTCACTCCATTTAGCAGGTGTTTCATCAATTCTTGGAGCAATTAATTTTATTACCACAACTATTAATATAAAACCTCCAACTATTTCCCAATACCAAACACCACTATTTGTCTGATCTGTGCTTGTAACTGCCGTTCTGCTTCTTCTATCACTACCTGTGCTAGCTGCAGGAATTACAATGCTTCTAACAGACCGAAACCTTAATACTACATTCTTTGACCCCGCAGGAGGAGGAGACCCCATCCTCTATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.7188",
+                            "-14.9397"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB303-10",
+                "_score": 247.85023,
+                "_source": {
+                    "processid": "HVDB303-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGGGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGGGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCAGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.1722",
+                            "-26.8773"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB305-10",
+                "_score": 247.85023,
+                "_source": {
+                    "processid": "HVDB305-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGGGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGGGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCAGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.1722",
+                            "-26.8773"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF737-12",
+                "_score": 247.44911,
+                "_source": {
+                    "processid": "HVDBF737-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGAGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGGGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCAGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "ANGFW212-12",
+                "_score": 247.34138,
+                "_source": {
+                    "processid": "ANGFW212-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:ACM4017",
+                    "seq": "CTTTATCTTGTATTCGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGCCAACCTGGATCACTCTTAGGTGATGATCAAATTTATAATGTTATCGTTACTGCCCACGCCTTCGTAATAATTTTCTTTATAGTAATACCAATCCTTATTGGAGGATTTGGAAATTGACTGGTACCACTAATAATTGGAGCCCCAGATATAGCATTTCCTCGAATAAATAATATAAGTTTCTGATTACTTCCCCCCTCATTTCTTCTACTCCTGGCCTCTTCCGGTGTAGAAGCGGGGGCAGGAACAGGTTGAACAGTCTACCCACCCCTTGCAAGCAACCTAGCCCATGCAGGAGCATCAGTTGATTTGACAATTTTCTCACTCCATTTAGCAGGTGTTTCATCAATTCTTGGAGCAATTAATTTTATTACCACAACTATTAATATAAAACCTCCAACTATTTCCCAATACCAAACACCACTATTTGTCTGATCTGTGCTTGTAACTGCCGTTCTGCTTCTTCTATCACTACCTGTGCTAGCTGCAGGAATTACAATGCTTCTAACAGACCGAAACCTTAATACTACATTCTTTGACCCCGCAGGAGGAGGAGACCCCATCCTCTATCAACACCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "16.9066",
+                            "-14.6497"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDBF740-12",
+                "_score": 247.01591,
+                "_source": {
+                    "processid": "HVDBF740-12",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGAGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGAGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCAGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "17.488",
+                            "-27.915"
+                        ]
+                    }
+                }
+            },
+            {
+                "_index": "dna",
+                "_type": "sequence",
+                "_id": "HVDB299-10",
+                "_score": 246.6433,
+                "_source": {
+                    "processid": "HVDB299-10",
+                    "phylum": "Chordata",
+                    "class": "Actinopterygii",
+                    "order": "Cypriniformes",
+                    "species": "Cypriniformes sp. BOLD:AAM3949",
+                    "seq": "CCTTTATCTCGTATTTGGTGCCTGAGCCGGAATAGTGGGAACCGCCTTAAGCCTTCTCATTCGGGCTGAACTAAGTCAACCTGGATCGCTTCTAGGTGATGACCAAATTTACAATGTTATCGTAACTGCTCATGCCTTCGTAATAATTTTCTTTATAGTAATGCCTATCCTTATTGGGGGGTTTGGAAACTGACTCGTACCATTAATGATCGGAGCCCCAGACATGGCATTCCCCCGTATAAATAACATAAGCTTCTGACTCCTACCCCCATCATTTCTACTATTACTAGCCTCTTCTGGTGTCGAAGCTGGAGCTGGAACAGGATGAACAGTATACCCACCTCTTGCAGGCAACTTAGCTCACGCAGGAGCATCAGTAGATCTGACAATTTTCTCACTCCATTTAGCAGGGGTCTCATCAATTCTAGGAGCTATTAATTTTATTACTACAACTATTAATATGAAACCCCCGGCCATTTCACAATATCAAACACCTCTATTCGTCTGATCCGTGCTTGTAACCGCCGTACTACTTCTCCTATCGTTGCCAGTACTAGCAGCAGGCATTACAATGCTTTTAACAGATCGAAATCTTAATACTACGTTCTTCGACCCGGCAGGAGGAGGAGACCCAATCCTCTATCAACATCTA",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            "28.1722",
+                            "-26.8773"
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+};
+
+
+var n = results.hits.hits.length;
+
+var cp = 
+    cartesianProduct(
+        [
+            ['A','C','G','T'], 
+            ['A','C','G','T'], 
+            ['A','C','G','T'], 
+            ['A','C','G','T'], 
+            ['A','C','G','T']
+        ]
+    );
+
+//document.write(JSON.stringify(cp));
+
+// encode sequences as 5-tuples
+var tuples = [];
+
+for (var i = 0; i < n; i++)
+{
+	tuples[i] = {};
+	
+	// intialise
+	for (var j in cp)
+	{		
+		tuples[i][cp[j].join("")] = 0;
+	}
+
+	var seq = results.hits.hits[i]._source.seq;
+	var len = seq.length;
+	
+	for (var j = 0; j < len - 5; j++)
+	{
+		var tuple = seq.substring(j, j + 5);
+		//document.write(tuple + '<br/>');
+		
+		if (tuple in tuples[i]) {
+			tuples[i][tuple]++;
+		}
+	}
+}
+
+// labels
+var taxa = [];
+
+for (var i = 0; i < n; i++) {
+	var label = results.hits.hits[i]._source.processid;
+
+	label = label.replace(".COI-5P", "");
+	label = label.replace("-", "");
+	
+	if (results.hits.hits[i]._source.species) {
+	    label += ' ' + results.hits.hits[i]._source.species;
+		label = label.replace(" ", "_");
+		label = label.replace(":", "");
+	}
+	
+	taxa.push({name:label});
+
+}
+
+//document.write(JSON.stringify(taxa, null, 2));
+
+// compute distances
+var D = [];
+for (var i = 0; i < n; i++) {
+	D[i] = [];
+	for (var j = 0; j < n; j++) {
+		D[i][j] = 0;
+	}
+}
+
+for (var i = 1; i < n; i++) {
+	for (var j = 0; j < i; j++) {
+		var d = 0;
+		// compare tuples
+		for (var k in tuples[i]) {
+			d += (tuples[i][k] - tuples[j][k]) * (tuples[i][k] - tuples[j][k]);
+		}
+		
+		D[i][j] = d;
+		D[j][i] = d;
+	}
+}
+
+//document.write(JSON.stringify(D, null, 2));
+
+var RNJ = new RapidNeighborJoining(D, taxa);
+RNJ.run();
+console.log('run');
+var treeObject = RNJ.getAsObject();
+var treeNewick = RNJ.getAsNewick();
+console.log(treeNewick);
+
+showtree('svg', treeNewick);
+
+
+
+
+</script>
+
+
+
+</body>
+</html>
