@@ -35,7 +35,16 @@ $json= '{
                "analyzer": "ngram_tokenizer_analyzer"
             }
          }
-      }
+      },
+	 "sequence": {
+		"properties": {
+			"geometry": {
+			  "type": "geo_shape",
+              "tree": "quadtree",
+              "precision": "1m"			
+			}
+		}
+	  }
    }
 }';
 
