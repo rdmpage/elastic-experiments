@@ -1,0 +1,720 @@
+<eml:eml xmlns:eml="eml://ecoinformatics.org/eml-2.1.1"
+         xmlns:dc="http://purl.org/dc/terms/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="eml://ecoinformatics.org/eml-2.1.1 http://rs.gbif.org/schema/eml-gbif-profile/1.1/eml.xsd"
+         packageId="http://ipt.pensoft.net/resource?id=inle_fish_2014-16/v1.5" system="http://gbif.org" scope="system"
+         xml:lang="eng">
+
+<dataset>
+  <alternateIdentifier>http://ipt.pensoft.net/resource?r=inle_fish_2014-16</alternateIdentifier>
+  <title xml:lang="eng">A dataset of Inle Lake fish fauna and its distribution</title>
+      <creator>
+    <individualName>
+        <givenName>Yuichi</givenName>
+      <surName>Kano</surName>
+    </individualName>
+    <organizationName>Kyushu University</organizationName>
+    <positionName>Associate Professor</positionName>
+    <address>
+        <deliveryPoint>744 Motooka, Nishi-ku</deliveryPoint>
+        <city>Fukuoka-shi</city>
+        <administrativeArea>Fukuoka</administrativeArea>
+        <postalCode>8190395</postalCode>
+        <country>JP</country>
+    </address>
+    <electronicMailAddress>kano@species.jp</electronicMailAddress>
+      </creator>
+      <metadataProvider>
+    <individualName>
+        <givenName>Yuichi</givenName>
+      <surName>Kano</surName>
+    </individualName>
+    <organizationName>Kyushu University</organizationName>
+    <positionName>Associate Professor</positionName>
+    <address>
+        <deliveryPoint>744 Motooka, Nishi-ku</deliveryPoint>
+        <city>Fukuoka-shi</city>
+        <administrativeArea>Fukuoka</administrativeArea>
+        <postalCode>8190395</postalCode>
+        <country>JP</country>
+    </address>
+    <electronicMailAddress>kano@species.jp</electronicMailAddress>
+      </metadataProvider>
+      <associatedParty>
+    <individualName>
+        <givenName>Yuichi</givenName>
+      <surName>Kano</surName>
+    </individualName>
+    <organizationName>Kyushu University</organizationName>
+    <positionName>Associate Professor</positionName>
+    <address>
+        <deliveryPoint>744 Motooka, Nishi-ku</deliveryPoint>
+        <city>Fukuoka-shi</city>
+        <administrativeArea>Fukuoka</administrativeArea>
+        <postalCode>8190395</postalCode>
+        <country>JP</country>
+    </address>
+    <electronicMailAddress>kano@species.jp</electronicMailAddress>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName> Prachya</givenName>
+      <surName>Musikasinthorn</surName>
+    </individualName>
+    <organizationName>Kasetsart University</organizationName>
+    <positionName>Lecturer</positionName>
+    <address>
+        <country>TH</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName> Akihisa</givenName>
+      <surName>Iwata</surName>
+    </individualName>
+    <organizationName>Kyoto University</organizationName>
+    <positionName>Professor</positionName>
+    <address>
+        <country>JP</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName> Sein</givenName>
+      <surName>Tun</surName>
+    </individualName>
+    <organizationName>Forest Department, Ministry of Natural Resources and Environmental Conservation, the Republic of the Union of Myanmar</organizationName>
+    <positionName>Officer</positionName>
+    <address>
+        <country>MM</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName>LKC</givenName>
+      <surName>Yun</surName>
+    </individualName>
+    <organizationName>Forest Department, Ministry of Natural Resources and Environmental Conservation, the Republic of the Union of Myanmar</organizationName>
+    <positionName>Officer</positionName>
+    <address>
+        <country>MM</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName> Seint</givenName>
+      <surName>Win</surName>
+    </individualName>
+    <organizationName>Taunggyi University</organizationName>
+    <positionName>Professor</positionName>
+    <address>
+        <country>MM</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName>Shoko</givenName>
+      <surName>Matsui</surName>
+    </individualName>
+    <organizationName>Kyoto University</organizationName>
+    <positionName>Postdoctoral Fellow</positionName>
+    <address>
+        <country>JP</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName>Ryoichi</givenName>
+      <surName>Tabata</surName>
+    </individualName>
+    <organizationName>Kyoto University</organizationName>
+    <positionName>Postdoctoral Fellow</positionName>
+    <address>
+        <country>JP</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName> Takeshi</givenName>
+      <surName>Yamasaki</surName>
+    </individualName>
+    <organizationName>Yamashina Institute for Ornithology</organizationName>
+    <positionName>Research Fellow</positionName>
+    <address>
+        <country>JP</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+      <associatedParty>
+    <individualName>
+        <givenName>Katsutoshi</givenName>
+      <surName>Watanabe</surName>
+    </individualName>
+    <organizationName>Kyoto University</organizationName>
+    <positionName>Associate Professor</positionName>
+    <address>
+        <country>JP</country>
+    </address>
+    <role>author</role>
+      </associatedParty>
+  <pubDate>
+      2016-11-04
+  </pubDate>
+  <language>eng</language>
+  <abstract>
+    <para>Inle Lake is located on the Southwestern part of Shan State, which is easternmost state in Myanmar (Burma). The lake is surrounded by Shan Hills, by which the lake and neighboring aquatic habitats has been historically isolated and thus harboring several endemic fish species. These aquatic environments and local markets were where the surveys were carried out.</para>
+  </abstract>
+      <keywordSet>
+            <keyword>Myanmar</keyword>
+            <keyword>Burma</keyword>
+            <keyword>Shan State</keyword>
+            <keyword>Inle Lake</keyword>
+            <keyword>Inlay Lake</keyword>
+            <keyword>ancient lake</keyword>
+            <keyword>freshwater fishes</keyword>
+            <keyword>endemic species</keyword>
+            <keyword>alien</keyword>
+            <keyword>mitochondrial DNA</keyword>
+            <keyword>COI</keyword>
+            <keyword>CT scan</keyword>
+            <keyword>3D model</keyword>
+        <keywordThesaurus>GBIF Dataset Type Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_type.xml</keywordThesaurus>
+      </keywordSet>
+  <additionalInfo>
+    <para>Endemic: Celestichthys erythromicron; Channa harcourtbutleri; Cyprinus intha; Gymnostomus horai; Inlecypris auropurpureus; Macrognathus caudiocellatus; Mastacembelus oatesii; Microrasbora rubescens; Neolissochilus nigrovittatus; Petruichthys brevis; Physoschistura shanensis; Poropuntius schanicus; Sawbwa resplendens
+
+Native (but not endemic): Anabas testudineus; Channa striata; Chaudhuria caudata; Clarias cf. batrachus; Devario kakhienensis; Garra gravelyi; Glyptothorax granosus; Glyptothorax rugimentum; Lepidocephalichthys berdmorei; Monopterus cuchia; Monopterus javanensis; Notopterus notopterus; Pethia stoliczkana; Physoschistura rivulicola; Systomus cf. rubripinnis
+
+Non-native: Barbonymus gonionotus; Clarias gariepinus; Ctenopharyngodon idella; Cyprinus rubrofuscus; Esomus danrica; Gambusia affinis; Glossogobius cf. giuris; Heteropneustes fossilis; Labeo rohita; Oreochromis niloticus; Oryzias uwai; Parambassis lala; Parambassis ranga; Poecilia reticulata; Puntius sophore; Trichogaster labiosa; Trichopodus pectoralis
+
+Unknown: Balitora sp.; Devario sp.; Puntius cf. sophore; Schistura sp.
+
+Endemic species unascertained: Systomus compressiformis; Silurus burmanensis</para>
+  </additionalInfo>
+  <intellectualRights>
+    <para>This work is licensed under a <ulink url="http://creativecommons.org/licenses/by-nc/4.0/legalcode"><citetitle>Creative Commons Attribution Non Commercial (CC-BY-NC) 4.0 License</citetitle></ulink>.</para>
+  </intellectualRights>
+  <distribution scope="document">
+    <online>
+      <url function="information">http://ffish.asia/INLE2016</url>
+    </online>
+  </distribution>
+  <coverage>
+      <geographicCoverage>
+          <geographicDescription>Aquatic habitats around Inlay Lake in Shan State and Kayah State, Myanmar.</geographicDescription>
+        <boundingCoordinates>
+          <westBoundingCoordinate>96.683</westBoundingCoordinate>
+          <eastBoundingCoordinate>97.215</eastBoundingCoordinate>
+          <northBoundingCoordinate>20.724</northBoundingCoordinate>
+          <southBoundingCoordinate>19.666</southBoundingCoordinate>
+        </boundingCoordinates>
+      </geographicCoverage>
+          <temporalCoverage>
+              <rangeOfDates>
+                  <beginDate>
+                    <calendarDate>2014-09-23</calendarDate>
+                  </beginDate>
+                <endDate>
+                  <calendarDate>2016-07-02</calendarDate>
+                </endDate>
+              </rangeOfDates>
+          </temporalCoverage>
+          <taxonomicCoverage>
+              <generalTaxonomicCoverage>Annandale (1918), Akihito and Meguro (1975), Roberts (1986), Kottelat (1990), Talwar and Jhingran (1991), Fang (1997), Roberts (1997), Musikasinthorn (1998), Roberts (1998), Kottelat and Witte (1999), Ng et al. (1999), Kottelat (2001), Fang (2003), Kottelat (2003), Roberts (2007), Ng and Kottelat (2008), Fang et al. (2009), Matsumoto et al. (2009), Britz (2010), Havird and Page (2010), Jiang et al. (2012), Kottelat (2012), Kottelat et al. (2012), Pethiyagoda et al. (2012), Kottelat (2013), Hastings et al. (2014), Ratmuangkhwang et al. (2014) and Nelson et al. (2016) were used as a taxonomic reference for this work. The coverage of this dataset includes Class Actinopterygii. The orders are Cypriniformes (26 species), Anabantiformes (5), Siluriformes (5), Synbranchiformes (5), Cyprinodontiformes (2), Perciformes (2), Beloniformes (1), Cichliformes (1), Gobiiformes (1) and Osteoglossiformes (1). The families are Cyprinidae (20), Nemacheilidae (4), Ambassidae (2), Channidae (2), Clariidae (2), Mastacembelidae (2), Osphronemidae (2), Poeciliidae (2), Sisoridae (2), Synbranchidae (2), Anabantidae (1), Adrianichthyidae (1), Balitoridae (1), Chaudhuriidae (1), Cichlidae (1), Cobitidae (1), Gobiidae (1), Heteropneustidae (1) and Notopteridae (1).</generalTaxonomicCoverage>
+              <taxonomicClassification>
+                  <taxonRankName>kingdom</taxonRankName>
+                <taxonRankValue>Animalia</taxonRankValue>
+                  <commonName>Animals</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>phylum</taxonRankName>
+                <taxonRankValue>Chordata</taxonRankValue>
+                  <commonName>Chordates</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>subphylum</taxonRankName>
+                <taxonRankValue>Craniata</taxonRankValue>
+                  <commonName>Vertebrat es and hagfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>class</taxonRankName>
+                <taxonRankValue>Osteichthyes</taxonRankValue>
+                  <commonName>Bony fishes and tetrapods</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Anabantiformes</taxonRankValue>
+                  <commonName>Labyrinth fishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Beloniformes</taxonRankValue>
+                  <commonName>Needlefishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Cichliformes</taxonRankValue>
+                  <commonName>Cichlids and con vict blennies</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Cypriniformes</taxonRankValue>
+                  <commonName>Carps, loaches, minnows and relatives</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Cyprinodontiformes</taxonRankValue>
+                  <commonName>Killifishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Gobiiformes</taxonRankValue>
+                  <commonName>Gobies</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Osteoglossiformes</taxonRankValue>
+                  <commonName>Bonytongues</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Perciformes</taxonRankValue>
+                  <commonName>Perches</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Siluriformes</taxonRankValue>
+                  <commonName>Catfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>order</taxonRankName>
+                <taxonRankValue>Synbranchiformes</taxonRankValue>
+                  <commonName>Swamp eels</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Anabantidae</taxonRankValue>
+                  <commonName>Climbing gouramies</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Adrianichthyidae</taxonRankValue>
+                  <commonName>Adrianichthyids</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Ambassidae</taxonRankValue>
+                  <commonName>Asiatic glassfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Balitoridae</taxonRankValue>
+                  <commonName>Hillstream loaches </commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Channidae</taxonRankValue>
+                  <commonName>Snakeheads</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Chaudhuriidae</taxonRankValue>
+                  <commonName>Earthworm eels</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Cichlidae</taxonRankValue>
+                  <commonName>Cichlids</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Clariidae</taxonRankValue>
+                  <commonName>Airbreathing catfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Cobitidae</taxonRankValue>
+                  <commonName>True loaches</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Cyprinidae</taxonRankValue>
+                  <commonName>Cyprinids</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Gobiidae</taxonRankValue>
+                  <commonName>Gobies</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Heteropneustidae</taxonRankValue>
+                  <commonName>Airsac catfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Mastacembelidae</taxonRankValue>
+                  <commonName>Spiny eels</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Nemacheilidae</taxonRankValue>
+                  <commonName>Stone loaches</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Notopteridae</taxonRankValue>
+                  <commonName>Knifefishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Osphronemidae</taxonRankValue>
+                  <commonName>Gouramies and fighting fishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Poeciliidae</taxonRankValue>
+                  <commonName>Livebearers</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Sisoridae</taxonRankValue>
+                  <commonName>Sisorid catfishes</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>family</taxonRankName>
+                <taxonRankValue>Synbranchidae</taxonRankValue>
+                  <commonName>Swamp eels</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Anabas testudineus (Bloch 1792)</taxonRankValue>
+                  <commonName>Climbing gourami</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Balitora sp.</taxonRankValue>
+                  <commonName>A species of ba litorid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Barbonymus gonionotus (Bleeker 1849)</taxonRankValue>
+                  <commonName>Silver barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Celestichthys erythromicron (Annandale 1918)</taxonRankValue>
+                  <commonName>A species of Celestichthys minnow</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Channa harcourtbutleri (Annandale 1918)</taxonRankValue>
+                  <commonName>Inle snakehead</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Channa striata (Bloch 1793)</taxonRankValue>
+                  <commonName>Striped snakehead</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Chaudhuria caudata Annandale 1918</taxonRankValue>
+                  <commonName>Inle swamp eel</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Clarias gariepinus (Burchell 1822)</taxonRankValue>
+                  <commonName>African sharptooth catfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Clarias cf. batrachus (Linnaeus 1758)</taxonRankValue>
+                  <commonName>Walking catfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Ctenopharyngodon idella (Valenciennes 1844)</taxonRankValue>
+                  <commonName>Grass carp</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Cyprinus intha Annandale 1918</taxonRankValue>
+                  <commonName>Inle carp</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Cyprinus rubrofuscus Lacepède 1803</taxonRankValue>
+                  <commonName>Common carp</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Devario kakhienensis (Anderson 1879)</taxonRankValue>
+                  <commonName>A species of Devario minnow</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Devario sp.</taxonRankValue>
+                  <commonName>A species of Devario minnow</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Esomus danrica (Hamilton 1822)</taxonRankValue>
+                  <commonName>Flying barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Gambusia affinis (Baird &amp; Girard 1853)</taxonRankValue>
+                  <commonName>Western mosquitofish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Garra gravelyi (Annandale 1919)</taxonRankValue>
+                  <commonName>Burmese Garra</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Glossogobius cf. giuris (Hamilton 1822)</taxonRankValue>
+                  <commonName>A species of Glossogobius goby</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Glyptothorax granosus Jiang, Ng, Yang &amp; Chen 2012</taxonRankValue>
+                  <commonName>A species of sisorid catfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Glyptothorax rugimentum Ng &amp; Kottelat 2008</taxonRankValue>
+                  <commonName>A species of sisorid catfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Gymnostomus horai (Bănărescu 1986)</taxonRankValue>
+                  <commonName>A species of Gymnostomus minnow</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Heteropneustes fossilis (Bloch 1794)</taxonRankValue>
+                  <commonName>Stinging catfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Inlecypris auropurpureus (Annandale 1918)</taxonRankValue>
+                  <commonName>A species of Inlecypris minnow</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Labeo rohita (Hamilton 1822)</taxonRankValue>
+                  <commonName>Rohu</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Lepidocephalichthys berdmorei (Blyth 1860)</taxonRankValue>
+                  <commonName>A species of cobitid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Macrognathus caudiocellatus (Boulenger 1893)</taxonRankValue>
+                  <commonName>A species of spiny eel</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Mastacembelus oatesii Boulenger 1893</taxonRankValue>
+                  <commonName>A species of spiny eel</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Microrasbora rubescens Annandale 1918</taxonRankValue>
+                  <commonName>Red dwarf rasbora</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Monopterus cuchia (Hamilton 1822)</taxonRankValue>
+                  <commonName>Gangetic mud eel</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Monopterus javanensis Lacepède 1800</taxonRankValue>
+                  <commonName>Asian swamp eel</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Neolissochilus nigrovittatus (Boulenger 1893)</taxonRankValue>
+                  <commonName>A species of Neolissochilus barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Notopterus notopterus (Pallas 1769)</taxonRankValue>
+                  <commonName>Bronze featherback</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                <taxonRankValue>Oreochromis niloticus (Linnaeus 1758)</taxonRankValue>
+                  <commonName>Nile tilapia</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Oryzias uwai Roberts 1998</taxonRankValue>
+                  <commonName>A species of rice fish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Parambassis lala (Hamilton 1822)</taxonRankValue>
+                  <commonName>A species of Asiatic glassfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Parambassis ranga (Hamilton 1822)</taxonRankValue>
+                  <commonName>A species of Asiatic glassfish</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Pethia stoliczkana (Day 1870)</taxonRankValue>
+                  <commonName>Stoliczka&apos;s barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Petruichthys brevis (Boulenger 1893)</taxonRankValue>
+                  <commonName>A species of nemacheilid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Physoschistura rivulicola (Hora 1929)</taxonRankValue>
+                  <commonName>A species of nemacheilid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Physoschistura shanensis (Hora 1929)</taxonRankValue>
+                  <commonName>A species of nemacheilid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Poecilia reticulata Peters 1859</taxonRankValue>
+                  <commonName>Guppy</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Poropuntius schanicus (Boulenger, 1893)</taxonRankValue>
+                  <commonName>A species of Poropuntius barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Puntius sophore (Hamilton 1822)</taxonRankValue>
+                  <commonName>Spotfin swamp barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Puntius cf. sophore (Hamilton 1822)</taxonRankValue>
+                  <commonName>A species of Puntius barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Sawbwa resplendens Annandale 1918</taxonRankValue>
+                  <commonName>Burmese r am my n ose</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Schistura sp.</taxonRankValue>
+                  <commonName>A species of nemacheilid loach</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Systomus cf. rubripinnis (Valenciennes 1842)</taxonRankValue>
+                  <commonName>A species of Systomus barb</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Trichogaster labiosa Day 1877</taxonRankValue>
+                  <commonName>Thick-lipped gourami</commonName>
+              </taxonomicClassification>
+              <taxonomicClassification>
+                  <taxonRankName>species</taxonRankName>
+                <taxonRankValue>Trichopodus pectoralis Regan 1910</taxonRankValue>
+                  <commonName>Snakeskin gourami</commonName>
+              </taxonomicClassification>
+          </taxonomicCoverage>
+  </coverage>
+  <maintenance>
+    <description>
+      <para></para>
+    </description>
+    <maintenanceUpdateFrequency>unkown</maintenanceUpdateFrequency>
+  </maintenance>
+
+      <contact>
+    <individualName>
+        <givenName>Yuichi</givenName>
+      <surName>Kano</surName>
+    </individualName>
+    <organizationName>Kyushu University</organizationName>
+    <positionName>Associate Professor</positionName>
+    <address>
+        <deliveryPoint>744 Motooka, Nishi-ku</deliveryPoint>
+        <city>Fukuoka-shi</city>
+        <administrativeArea>Fukuoka</administrativeArea>
+        <postalCode>8190395</postalCode>
+        <country>JP</country>
+    </address>
+    <electronicMailAddress>kano@species.jp</electronicMailAddress>
+      </contact>
+  <methods>
+        <methodStep>
+          <description>
+            <para>Sampling locality and date were recorded.</para>
+          </description>
+        </methodStep>
+        <methodStep>
+          <description>
+            <para>Specimens were given IDs, photographed, fin-clipped, and roughly classified on site.</para>
+          </description>
+        </methodStep>
+        <methodStep>
+          <description>
+            <para>Specimens were shipped back to the lab for correct species identification.</para>
+          </description>
+        </methodStep>
+        <methodStep>
+          <description>
+            <para>Specimens were fixed in 10% neutral buffered formalin for one month. Next, they were cleaned with water and preserved in 70% alcohol.</para>
+          </description>
+        </methodStep>
+      <sampling>
+        <studyExtent>
+          <description>
+            <para>The surveys were carried out from 2014 to 2016 in aquatic environments and local markets, which were associated with Inle Lake, of Shan State and Kayah State of Myanmar.</para>
+          </description>
+        </studyExtent>
+        <samplingDescription>
+          <para>The fish samples were collected and purchased at 44 wild habitats, 25 local markets, and 1 fish-cage put in the lake. In the wild, the fishes were collected by hand-nets, throwing nets, traps, and/or purchasing from fishermen. In the markets, we avoided to purchase the obvious cultured fishes from other areas (especially from Yangon and Mandalay), such as Wallago spp. and Pangasianodon hypophthalmus, by interviewing the seller.</para>
+        </samplingDescription>
+      </sampling>
+      <qualityControl>
+        <description>
+          <para>All the scientific names of fish samples were validated by the updated fish checklist in the Catalogue of Fishes, California Academy of Sciences (http://www.calacademy.org/scientists/projects/catalog-of-fishes), Kottelat (2013) and/or Nelson et al. (2016). For order level classification of the family Ambassidae, we tentatively followed Hastings et al. (2014). Most of the specimens were photographed in fresh (Kano and Nakajima 2014), and then the formalin specimens and its tissue samples were catalogued and deposited at Research Laboratory of Ichthyology, Department of Fishery Biology, Faculty of Fisheries, Kasetsart University, Bangkok, Thailand (RLIKU) and Kyoto University, Kyoto, Japan, respectively. All the samples were assigned the IDs which were associated with the records of location (latitude, longitude, and region name), the dates, methods, accession numbers of DNA sequences, etc.</para>
+        </description>
+      </qualityControl>
+  </methods>
+</dataset>
+  <additionalMetadata>
+    <metadata>
+      <gbif>
+          <dateStamp>2016-09-10T03:32:29.985+03:00</dateStamp>
+          <hierarchyLevel>dataset</hierarchyLevel>
+            <citation>Kano Y (2016): A dataset of Inle Lake fish fauna and its distribution. v1.5. ZooKeys. Dataset/Occurrence. http://ipt.pensoft.net/resource?r=inle_fish_2014-16&amp;v=1.5</citation>
+          <resourceLogoUrl>http://ipt.pensoft.net/logo.do?r=inle_fish_2014-16</resourceLogoUrl>
+              <collection>
+                <collectionName>RLIKU-IL</collectionName>
+              </collection>
+                <specimenPreservationMethod>formalin</specimenPreservationMethod>
+                <specimenPreservationMethod>alcohol</specimenPreservationMethod>
+          <dc:replaces>http://ipt.pensoft.net/resource?id=inle_fish_2014-16/v1.5.xml</dc:replaces>
+      </gbif>
+    </metadata>
+  </additionalMetadata>
+</eml:eml>
