@@ -162,6 +162,10 @@ Can also include taxonomic information in a spatial query (in this case “Costa
 
 Can add taxonomic groups to queries (see above).
 
+## Phylogeny
+
+Can build trees in browser using NJ Javascript code from https://github.com/biosustain/neighbor-joining (I’ve hacked this to remove dependency on timsort, need to text. Code also doesn’t midpoint root NJ trees.
+
 ## Examples
 
 ### COI barcodes not in BOLD
