@@ -74,10 +74,93 @@ where Xi and Yi correspond to the tuple i's frequencies (=counts/n−k + 1) in s
 
 ## Geographic search?
 
-Need to add geographic index.
+Add geographic index so we can have geographic searches.
+
+```javascript
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "ngram_tokenizer_analyzer": {
+          "tokenizer": "ngram_tokenizer"
+        }
+      },
+      "tokenizer": {
+        "ngram_tokenizer": {
+          "type": "ngram",
+          "min_gram": ' . $tuple_size . ',
+          "max_gram": ' . $tuple_size . ',
+          "token_chars": [
+            "letter",
+            "digit"
+          ]
+        }
+      }
+    }
+  },
+   "mappings": {
+      "doc": {
+         "properties": {
+            "seq": {
+               "type": "text",
+               "analyzer": "ngram_tokenizer_analyzer"
+            }
+         }
+      },
+	 "sequence": {
+		"properties": {
+			"geometry": {
+			  "type": "geo_shape",
+              "tree": "quadtree",
+              "precision": "1m"			
+			}
+		}
+	  }
+   }
+}
+```
+
+Can also include taxonomic information in a spatial query (in this case “Costa Rica” and “Reptilia” (country bounding box from https://raw.githubusercontent.com/lontongcorp/geodata/master/country_bbox.geojson ):
+
+```javascript
+{
+	"size": "100",
+	"query": {
+		"bool": {
+			"must": [{
+				"geo_shape": {
+					"geometry": {
+						"shape": {
+							"type": "Polygon",
+							"coordinates": [
+								[
+									[-85.898621, 8.026709],
+									[-85.898621, 11.21361],
+									[-82.565193, 11.21361],
+									[-82.565193, 8.026709],
+									[-85.898621, 8.026709]
+								]
+							]
+						}
+					}
+				}
+			}, {
+				"match": {
+					"class": "Reptilia"
+				}
+			}]
+		}
+	}
+}
+```
+
+
+
+
 
 ## Taxonomic search using facets?
 
+Can add taxonomic groups to queries (see above).
 
 ## Examples
 
